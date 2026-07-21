@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>单词默写游戏 - Word Spelling Game</title>
+    <style>
+        :root {
+            --bg: #f0f4f8;
+            --card-bg: #ffffff;
+            --card-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            --primary: #5b6af0;
+            --primary-hover: #4a56d4;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --text: #2d3748;
+            --text-light: #718096;
+            --box-border: #cbd5e0;
+            --box-filled: #e2e8f0;
+            --golden: #f6ad55;
+            --radius: 14px;
+            --radius-sm: 10px;
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', 'Monaco', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #e8edf5 0%, #f0f4f8 30%, #f7f9fc 60%, #eef1f7 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+            overflow-x: hidden;
+        }
+
+        /* Canvas for fireworks */
+        #fireworkCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .game-container {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 28px 24px 24px;
+            width: 100%;
+            max-width: 520px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1), 0 8px 20px rgba(0, 0, 0, 0.06);
+            position: relative;
+            z-index: 1;
+            transition: transform 0.3s ease;
+        }
+
+        /* Header */
+        .game-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .game-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .game-title .icon {
+            font-size: 1.8rem;
+        }
+        .progress-badge {
+            background: #f1f5f9;
+            color: var(--text-light);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+        .progress-badge span {
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        /* Chinese hint */
+        .hint-section {
+            text-align: center;
+            margin: 16px 0 20px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, #fefce8, #fffbeb);
+            border-radius: var(--radius);
+            border: 2px dashed #fcd34d;
+            position: relative;
+        }
+        .hint-label {
+            font-size: 0.8rem;
+            color: #b45309;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .hint-word {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #92400e;
+            letter-spacing: 0.04em;
+            line-height: 1.2;
+        }
+
+        /* Boxes row (target area - 第二行) */
+        .section-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .boxes-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+            min-height: 60px;
+            padding: 12px 8px;
+            background: #f8fafc;
+            border-radius: var(--radius);
+            border: 2px solid #e2e8f0;
+            transition: all var(--transition);
+            align-items: center;
+        }
+        .boxes-row.all-filled {
+            border-color: #94a3b8;
+            background: #f1f5f9;
+        }
+        .boxes-row.correct-flash {
+            border-color: var(--success) !important;
+            background: #ecfdf5 !important;
+            animation: pulse-green 0.6s ease-out;
+        }
+        .boxes-row.error-flash {
+            border-color: var(--error) !important;
+            background: #fef2f2 !important;
+            animation: shake 0.5s ease-out;
+        }
+        @keyframes pulse-green {
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 18px rgba(16, 185, 129, 0);
+            }
+        }
+        @keyframes shake {
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+            20% {
+                transform: translateX(-8px);
+            }
+            40% {
+                transform: translateX(8px);
+            }
+            60% {
+                transform: translateX(-5px);
+            }
+            80% {
+                transform: translateX(5px);
+            }
+        }
+
+        .box {
+            width: 50px;
+            height: 54px;
+            border: 2.5px dashed var(--box-border);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: #1a202c;
+            background: #fff;
+            cursor: pointer;
+            transition: all var(--transition);
+            position: relative;
+            letter-spacing: 0;
+        }
+        .box:hover {
+            border-color: #94a3b8;
+            background: #f8fafc;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .box.filled {
+            border-style: solid;
+            border-color: #94a3b8;
+            background: #e2e8f0;
+            cursor: pointer;
+            animation: pop-in 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .box.highlight-target {
+            border-color: var(--primary) !important;
+            background: #eef2ff !important;
+            box-shadow: 0 0 0 6px rgba(91, 106, 240, 0.12);
+            animation: glow-pulse 1s ease-in-out infinite;
+        }
+        @keyframes pop-in {
+            0% {
+                transform: scale(0.7);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        @keyframes glow-pulse {
+            0%,
+            100% {
+                box-shadow: 0 0 0 4px rgba(91, 106, 240, 0.08);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(91, 106, 240, 0.18);
+            }
+        }
+        .box .box-index {
+            position: absolute;
+            top: -18px;
+            font-size: 0.65rem;
+            color: #a0aec0;
+            font-weight: 500;
+            letter-spacing: 0;
+            pointer-events: none;
+        }
+
+        /* Letters row (source area - 第一行) */
+        .letters-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            padding: 8px 4px;
+            min-height: 60px;
+            align-items: center;
+        }
+        .letter-card {
+            width: 50px;
+            height: 54px;
+            border-radius: var(--radius-sm);
+            background: var(--card-bg);
+            box-shadow: var(--card-shadow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: #1a202c;
+            cursor: grab;
+            transition: all var(--transition);
+            position: relative;
+            letter-spacing: 0;
+            border: 2px solid transparent;
+        }
+        .letter-card:active {
+            cursor: grabbing;
+        }
+        .letter-card:hover:not(.used) {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.14);
+            border-color: var(--primary);
+            background: #f8faff;
+        }
+        .letter-card.used {
+            opacity: 0.3;
+            cursor: not-allowed;
+            pointer-events: none;
+            background: #f1f5f9;
+            box-shadow: none;
+            border-color: transparent;
+            transform: scale(0.9);
+            transition: all 0.3s ease;
+        }
+        .letter-card.selected {
+            border-color: var(--primary) !important;
+            background: #eef2ff !important;
+            box-shadow: 0 0 0 8px rgba(91, 106, 240, 0.15);
+            transform: translateY(-4px);
+            animation: selected-bounce 0.5s ease-in-out infinite;
+            z-index: 10;
+        }
+        @keyframes selected-bounce {
+            0%,
+            100% {
+                transform: translateY(-4px);
+            }
+            50% {
+                transform: translateY(-8px);
+            }
+        }
+        .letter-card.dragging {
+            opacity: 0.5;
+            transform: scale(0.85);
+            border-style: dashed;
+        }
+
+        /* Feedback message */
+        .feedback-area {
+            text-align: center;
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 6px;
+            font-weight: 700;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        .feedback-area.success {
+            color: var(--success);
+            font-size: 1.2rem;
+            animation: pop-in 0.4s ease-out;
+        }
+        .feedback-area.error {
+            color: var(--error);
+            animation: shake 0.4s ease-out;
+        }
+        .feedback-area .emoji {
+            font-size: 1.6rem;
+            margin: 0 4px;
+        }
+
+        /* Buttons */
+        .buttons-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .btn {
+            padding: 11px 22px;
+            border-radius: 25px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            letter-spacing: 0.03em;
+            transition: all var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+            font-family: inherit;
+        }
+        .btn:active {
+            transform: scale(0.94);
+        }
+        .btn-reset {
+            background: #fff;
+            color: #64748b;
+            border: 2px solid #e2e8f0;
+        }
+        .btn-reset:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+            color: #475569;
+        }
+        .btn-skip {
+            background: #fff;
+            color: var(--warning);
+            border: 2px solid #fcd34d;
+        }
+        .btn-skip:hover {
+            background: #fffbeb;
+            border-color: #f59e0b;
+            color: #d97706;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            font-weight: 700;
+            box-shadow: 0 4px 14px rgba(91, 106, 240, 0.35);
+            border: 2px solid transparent;
+        }
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            box-shadow: 0 6px 20px rgba(91, 106, 240, 0.45);
+            transform: translateY(-1px);
+        }
+        .btn-retry {
+            background: #fef2f2;
+            color: var(--error);
+            border: 2px solid #fecaca;
+            font-weight: 700;
+            animation: pop-in 0.3s ease-out;
+        }
+        .btn-retry:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+
+        /* QR Code Section */
+        .qr-section {
+            text-align: center;
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .qr-label {
+            font-size: 0.7rem;
+            color: #a0aec0;
+            letter-spacing: 0.04em;
+            font-weight: 500;
+        }
+        #qrcode {
+            display: inline-block;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #fff;
+            padding: 6px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+            line-height: 0;
+        }
+        #qrcode img,
+        #qrcode canvas {
+            display: block;
+            border-radius: 4px;
+        }
+        .qr-note {
+            font-size: 0.65rem;
+            color: #cbd5e0;
+            max-width: 280px;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        /* Toast overlay */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-120px);
+            background: #1a202c;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            z-index: 10000;
+            pointer-events: none;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            letter-spacing: 0.03em;
+        }
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.success-toast {
+            background: #059669;
+        }
+        .toast.error-toast {
+            background: #dc2626;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .game-container {
+                padding: 20px 12px 16px;
+                border-radius: 20px;
+            }
+            .game-title {
+                font-size: 1.2rem;
+            }
+            .hint-word {
+                font-size: 1.7rem;
+            }
+            .box,
+            .letter-card {
+                width: 42px;
+                height: 46px;
+                font-size: 1.2rem;
+                border-radius: 8px;
+            }
+            .boxes-row {
+                gap: 6px;
+                padding: 8px 4px;
+            }
+            .letters-row {
+                gap: 6px;
+            }
+            .btn {
+                padding: 10px 16px;
+                font-size: 0.85rem;
+                border-radius: 22px;
+            }
+            .box .box-index {
+                font-size: 0.55rem;
+                top: -15px;
+            }
+        }
+        @media (max-width: 360px) {
+            .box,
+            .letter-card {
+                width: 36px;
+                height: 40px;
+                font-size: 1.05rem;
+                border-radius: 7px;
+            }
+            .boxes-row {
+                gap: 4px;
+            }
+            .letters-row {
+                gap: 4px;
+            }
+            .hint-word {
+                font-size: 1.4rem;
+            }
+            .btn {
+                padding: 8px 12px;
+                font-size: 0.8rem;
+                gap: 3px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Fireworks Canvas -->
+    <canvas id="fireworkCanvas"></canvas>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Game Container -->
+    <div class="game-container" id="gameContainer">
+        <!-- Header -->
+        <div class="game-header">
+            <div class="game-title">
+                <span class="icon">📝</span> 单词默写
+            </div>
+            <div class="progress-badge" id="progressBadge">
+                进度 <span id="progressCurrent">1</span>/<span id="progressTotal">20</span>
+            </div>
+        </div>
+
+        <!-- Chinese Hint -->
+        <div class="hint-section">
+            <div class="hint-label">🔍 请拼出以下单词</div>
+            <div class="hint-word" id="hintWord">苹果</div>
+        </div>
+
+        <!-- 第二行：方框目标区 -->
+        <div class="section-label">📦 将字母放入下方框（按顺序）</div>
+        <div class="boxes-row" id="boxesRow">
+            <!-- Dynamically generated boxes -->
+        </div>
+
+        <!-- 第一行：字母选择区 -->
+        <div class="section-label">🔤 拖拽或双击字母</div>
+        <div class="letters-row" id="lettersRow">
+            <!-- Dynamically generated letter cards -->
+        </div>
+
+        <!-- Feedback -->
+        <div class="feedback-area" id="feedbackArea"></div>
+
+        <!-- Buttons -->
+        <div class="buttons-row" id="buttonsRow">
+            <button class="btn btn-reset" id="btnReset" title="清空重试当前单词">
+                🔄 重新输入
+            </button>
+            <button class="btn btn-skip" id="btnSkip" title="跳过进入下一个单词">
+                ⏭️ 下一个单词
+            </button>
+        </div>
+        <div class="buttons-row" id="retryButtonsRow" style="display:none;">
+            <button class="btn btn-retry" id="btnRetry">
+                🔁 重新输入
+            </button>
+            <button class="btn btn-skip" id="btnSkip2" title="跳过进入下一个单词">
+                ⏭️ 跳过
+            </button>
+        </div>
+
+        <!-- QR Code -->
+        <div class="qr-section">
+            <div class="qr-label">📱 扫描二维码打开游戏</div>
+            <div id="qrcode"></div>
+            <div class="qr-note" id="qrNote">
+                将此页面部署到服务器后，二维码即可扫描。本地打开时可分享URL。
+            </div>
+        </div>
+    </div>
+
+    <!-- QRCode.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js">
+    </script>
+
+    <script>
+        (function() {
+            // ==================== WORD DATA ====================
+            const wordList = [
+                { en: 'apple', zh: '苹果' },
+                { en: 'book', zh: '书' },
+                { en: 'cat', zh: '猫' },
+                { en: 'dog', zh: '狗' },
+                { en: 'egg', zh: '鸡蛋' },
+                { en: 'fish', zh: '鱼' },
+                { en: 'girl', zh: '女孩' },
+                { en: 'house', zh: '房子' },
+                { en: 'ice', zh: '冰' },
+                { en: 'jump', zh: '跳' },
+                { en: 'king', zh: '国王' },
+                { en: 'love', zh: '爱' },
+                { en: 'moon', zh: '月亮' },
+                { en: 'nose', zh: '鼻子' },
+                { en: 'orange', zh: '橙子' },
+                { en: 'pen', zh: '笔' },
+                { en: 'queen', zh: '女王' },
+                { en: 'rain', zh: '雨' },
+                { en: 'sun', zh: '太阳' },
+                { en: 'tree', zh: '树' },
+            ];
+
+            // Shuffle word order
+            let shuffledWords = [];
+            let currentWordIndex = 0;
+
+            function shuffleArray(arr) {
+                const a = [...arr];
+                for (let i = a.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [a[i], a[j]] = [a[j], a[i]];
+                }
+                return a;
+            }
+
+            function initWordSequence() {
+                shuffledWords = shuffleArray(wordList);
+                currentWordIndex = 0;
+            }
+
+            function getCurrentWord() {
+                return shuffledWords[currentWordIndex];
+            }
+
+            function advanceWord() {
+                currentWordIndex++;
+                if (currentWordIndex >= shuffledWords.length) {
+                    // All words completed, reshuffle
+                    initWordSequence();
+                    return { word: getCurrentWord(), isComplete: true };
+                }
+                return { word: getCurrentWord(), isComplete: false };
+            }
+
+            // ==================== DOM REFS ====================
+            const boxesRow = document.getElementById('boxesRow');
+            const lettersRow = document.getElementById('lettersRow');
+            const feedbackArea = document.getElementById('feedbackArea');
+            const hintWordEl = document.getElementById('hintWord');
+            const progressCurrent = document.getElementById('progressCurrent');
+            const progressTotal = document.getElementById('progressTotal');
+            const btnReset = document.getElementById('btnReset');
+            const btnSkip = document.getElementById('btnSkip');
+            const btnSkip2 = document.getElementById('btnSkip2');
+            const btnRetry = document.getElementById('btnRetry');
+            const retryButtonsRow = document.getElementById('retryButtonsRow');
+            const buttonsRow = document.getElementById('buttonsRow');
+            const toastEl = document.getElementById('toast');
+            const fireworkCanvas = document.getElementById('fireworkCanvas');
+            const ctx = fireworkCanvas.getContext('2d');
+            const qrNote = document.getElementById('qrNote');
+
+            // ==================== GAME STATE ====================
+            let targetWord = '';
+            let wordLength = 0;
+            let letterPool = []; // { id, letter, used, element }
+            let boxes = []; // { letter, sourceId, element }
+            let selectedLetterId = null; // Currently selected letter card id
+            let isChecking = false; // Prevent double-check
+            let gameLocked = false; // Lock after correct answer
+            let totalCompleted = 0;
+
+            // ==================== AUDIO (Simple Web Audio API) ====================
+            let audioCtx = null;
+
+            function getAudioContext() {
+                if (!audioCtx) {
+                    audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+                }
+                return audioCtx;
+            }
+
+            function playSound(frequency, duration, type = 'sine', rampDown = true) {
+                try {
+                    const ctx = getAudioContext();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                    if (rampDown) {
+                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                    }
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + duration);
+                } catch (e) {
+                    // Silently fail if audio not available
+                }
+            }
+
+            function playCorrectSound() {
+                playSound(660, 0.15, 'sine', true);
+                setTimeout(() => playSound(880, 0.2, 'sine', true), 150);
+                setTimeout(() => playSound(1100, 0.3, 'triangle', true), 300);
+            }
+
+            function playErrorSound() {
+                playSound(180, 0.35, 'square', true);
+            }
+
+            function playClickSound() {
+                playSound(500, 0.08, 'sine', true);
+            }
+
+            function playDropSound() {
+                playSound(400, 0.1, 'sine', true);
+            }
+
+            // ==================== TOAST ====================
+            let toastTimer = null;
+
+            function showToast(message, type = '') {
+                if (toastTimer) clearTimeout(toastTimer);
+                toastEl.textContent = message;
+                toastEl.className = 'toast ' + type;
+                requestAnimationFrame(() => {
+                    toastEl.classList.add('show');
+                });
+                toastTimer = setTimeout(() => {
+                    toastEl.classList.remove('show');
+                }, 2000);
+            }
+
+            // ==================== FIREWORKS ====================
+            let fireworks = [];
+            let fireworkParticles = [];
+            let fireworkRunning = false;
+            let fireworkRAF = null;
+
+            function resizeCanvas() {
+                fireworkCanvas.width = window.innerWidth;
+                fireworkCanvas.height = window.innerHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            class FireworkParticle {
+                constructor(x, y, color, speed, angle, life) {
+                    this.x = x;
+                    this.y = y;
+                    this.color = color;
+                    this.speed = speed;
+                    this.angle = angle;
+                    this.life = life;
+                    this.maxLife = life;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                    this.gravity = 0.04;
+                    this.friction = 0.98;
+                    this.size = 2.5 + Math.random() * 3;
+                }
+
+                update() {
+                    this.vx *= this.friction;
+                    this.vy *= this.friction;
+                    this.vy += this.gravity;
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.life--;
+                    this.size *= 0.995;
+                }
+
+                draw(ctx) {
+                    const alpha = this.life / this.maxLife;
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = this.color;
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 6;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                isDead() {
+                    return this.life <= 0;
+                }
+            }
+
+            function launchFirework(x, y) {
+                const colors = [
+                    '#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff',
+                    '#ff6eb4', '#ff9f43', '#a55eea', '#2ed573',
+                    '#ff4757', '#ffa502', '#7bed9f', '#70a1ff',
+                    '#ff6348', '#eccc68', '#1e90ff', '#ff1493',
+                ];
+                const numParticles = 50 + Math.floor(Math.random() * 60);
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const particles = [];
+                for (let i = 0; i < numParticles; i++) {
+                    const angle = (Math.PI * 2 / numParticles) * i + (Math.random() - 0.5) * 0.3;
+                    const speed = 3 + Math.random() * 8;
+                    const life = 40 + Math.floor(Math.random() * 50);
+                    const particleColor = Math.random() < 0.5 ?
+                        color :
+                        colors[Math.floor(Math.random() * colors.length)];
+                    particles.push(new FireworkParticle(x, y, particleColor, speed, angle, life));
+                }
+                fireworkParticles.push(...particles);
+            }
+
+            function triggerFireworks() {
+                const w = fireworkCanvas.width;
+                const h = fireworkCanvas.height;
+                // Launch multiple fireworks across the screen
+                const count = 5 + Math.floor(Math.random() * 4);
+                for (let i = 0; i < count; i++) {
+                    const delay = i * 180 + Math.random() * 150;
+                    setTimeout(() => {
+                        const fx = w * 0.15 + Math.random() * w * 0.7;
+                        const fy = h * 0.15 + Math.random() * h * 0.45;
+                        launchFirework(fx, fy);
+                    }, delay);
+                }
+                // Extra burst after a moment
+                setTimeout(() => {
+                    const fx2 = w * 0.2 + Math.random() * w * 0.6;
+                    const fy2 = h * 0.1 + Math.random() * h * 0.35;
+                    launchFirework(fx2, fy2);
+                }, 600);
+
+                if (!fireworkRunning) {
+                    fireworkRunning = true;
+                    animateFireworks();
+                }
+                // Auto-stop after some time
+                setTimeout(() => {
+                    fireworkRunning = false;
+                    if (fireworkRAF) cancelAnimationFrame(fireworkRAF);
+                    fireworkRAF = null;
+                    // Final cleanup
+                    setTimeout(() => {
+                        fireworkParticles = [];
+                        ctx.clearRect(0, 0, fireworkCanvas.width, fireworkCanvas.height);
+                    }, 1500);
+                }, 2800);
+            }
+
+            function animateFireworks() {
+                ctx.clearRect(0, 0, fireworkCanvas.width, fireworkCanvas.height);
+                fireworkParticles = fireworkParticles.filter(p => !p.isDead());
+                for (const p of fireworkParticles) {
+                    p.update();
+                    p.draw(ctx);
+                }
+                if (fireworkRunning || fireworkParticles.length > 0) {
+                    fireworkRAF = requestAnimationFrame(animateFireworks);
+                } else {
+                    fireworkRunning = false;
+                    fireworkRAF = null;
+                    ctx.clearRect(0, 0, fireworkCanvas.width, fireworkCanvas.height);
+                }
+            }
+
+            // ==================== GAME LOGIC ====================
+            function buildLetterPool(word) {
+                const letters = word.split('');
+                const shuffled = shuffleArray(letters);
+                return shuffled.map((letter, index) => ({
+                    id: `letter-${index}-${Date.now()}`,
+                    letter: letter,
+                    used: false,
+                    element: null,
+                }));
+            }
+
+            function buildBoxes(wordLength) {
+                const boxesArr = [];
+                for (let i = 0; i < wordLength; i++) {
+                    boxesArr.push({
+                        letter: null,
+                        sourceId: null,
+                        element: null,
+                        index: i,
+                    });
+                }
+                return boxesArr;
+            }
+
+            function renderGame() {
+                // Clear
+                boxesRow.innerHTML = '';
+                lettersRow.innerHTML = '';
+                feedbackArea.textContent = '';
+                feedbackArea.className = 'feedback-area';
+                boxesRow.classList.remove('all-filled', 'correct-flash', 'error-flash');
+                retryButtonsRow.style.display = 'none';
+                buttonsRow.style.display = 'flex';
+                selectedLetterId = null;
+                isChecking = false;
+                gameLocked = false;
+
+                const wordData = getCurrentWord();
+                targetWord = wordData.en.toLowerCase();
+                wordLength = targetWord.length;
+                letterPool = buildLetterPool(targetWord);
+                boxes = buildBoxes(wordLength);
+
+                // Update hint
+                hintWordEl.textContent = wordData.zh;
+                progressCurrent.textContent = currentWordIndex + 1;
+                progressTotal.textContent = shuffledWords.length;
+
+                // Render boxes (第二行 - 下方)
+                boxes.forEach((box, idx) => {
+                    const boxEl = document.createElement('div');
+                    boxEl.className = 'box';
+                    boxEl.dataset.boxIndex = idx;
+                    boxEl.innerHTML = `<span class="box-index">${idx + 1}</span>`;
+                    boxEl.addEventListener('click', () => onBoxClick(idx));
+                    boxEl.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                    });
+                    boxEl.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        const letterId = e.dataTransfer.getData('text/plain');
+                        onDropOnBox(idx, letterId);
+                    });
+                    boxEl.addEventListener('dragenter', (e) => {
+                        e.preventDefault();
+                        if (!boxes[idx].letter) {
+                            boxEl.style.borderColor = '#5b6af0';
+                            boxEl.style.background = '#eef2ff';
+                        }
+                    });
+                    boxEl.addEventListener('dragleave', () => {
+                        if (!boxes[idx].letter) {
+                            boxEl.style.borderColor = '';
+                            boxEl.style.background = '';
+                        }
+                    });
+                    boxesRow.appendChild(boxEl);
+                    box.element = boxEl;
+                });
+
+                // Render letter cards (第一行 - 上方)
+                letterPool.forEach((lp) => {
+                    const cardEl = document.createElement('div');
+                    cardEl.className = 'letter-card';
+                    cardEl.textContent = lp.letter;
+                    cardEl.draggable = true;
+                    cardEl.dataset.letterId = lp.id;
+                    cardEl.addEventListener('click', (e) => onLetterClick(lp.id, e));
+                    cardEl.addEventListener('dblclick', (e) => {
+                        e.preventDefault();
+                        onLetterDoubleClick(lp.id);
+                    });
+                    cardEl.addEventListener('dragstart', (e) => {
+                        if (lp.used || gameLocked) {
+                            e.preventDefault();
+                            return;
+                        }
+                        e.dataTransfer.setData('text/plain', lp.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                        cardEl.classList.add('dragging');
+                        // Clear selection
+                        clearSelection();
+                        selectedLetterId = null;
+                    });
+                    cardEl.addEventListener('dragend', () => {
+                        cardEl.classList.remove('dragging');
+                        // Reset all box highlights
+                        boxes.forEach(b => {
+                            if (b.element && !b.letter) {
+                                b.element.style.borderColor = '';
+                                b.element.style.background = '';
+                            }
+                        });
+                    });
+                    // Touch events for mobile drag simulation
+                    cardEl.addEventListener('touchstart', function(e) {
+                        if (lp.used || gameLocked) return;
+                        const touch = e.touches[0];
+                        const rect = cardEl.getBoundingClientRect();
+                        const offsetX = touch.clientX - rect.left;
+                        const offsetY = touch.clientY - rect.top;
+                        cardEl._touchData = { offsetX, offsetY, originalX: rect.left, originalY: rect
+                                .top };
+                    }, { passive: true });
+                    cardEl.addEventListener('touchmove', function(e) {
+                        if (!cardEl._touchData || lp.used || gameLocked) return;
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        cardEl.style.position = 'fixed';
+                        cardEl.style.zIndex = '100';
+                        cardEl.style.left = (touch.clientX - cardEl._touchData.offsetX) + 'px';
+                        cardEl.style.top = (touch.clientY - cardEl._touchData.offsetY) + 'px';
+                        cardEl.style.pointerEvents = 'none';
+                        // Highlight nearest empty box
+                        highlightNearestBox(touch.clientX, touch.clientY);
+                    }, { passive: false });
+                    cardEl.addEventListener('touchend', function(e) {
+                        if (!cardEl._touchData || lp.used || gameLocked) {
+                            resetCardPosition(cardEl);
+                            clearBoxHighlights();
+                            return;
+                        }
+                        const touch = e.changedTouches[0];
+                        const targetBoxIndex = findTargetBox(touch.clientX, touch.clientY);
+                        resetCardPosition(cardEl);
+                        clearBoxHighlights();
+                        if (targetBoxIndex !== null && !boxes[targetBoxIndex].letter) {
+                            placeLetterInBox(lp.id, targetBoxIndex);
+                        }
+                        cardEl._touchData = null;
+                    });
+                    lettersRow.appendChild(cardEl);
+                    lp.element = cardEl;
+                });
+
+                updateAllStyles();
+            }
+
+            function resetCardPosition(cardEl) {
+                cardEl.style.position = '';
+                cardEl.style.zIndex = '';
+                cardEl.style.left = '';
+                cardEl.style.top = '';
+                cardEl.style.pointerEvents = '';
+            }
+
+            function highlightNearestBox(cx, cy) {
+                clearBoxHighlights();
+                const nearest = findTargetBox(cx, cy);
+                if (nearest !== null && !boxes[nearest].letter && boxes[nearest].element) {
+                    boxes[nearest].element.classList.add('highlight-target');
+                }
+            }
+
+            function clearBoxHighlights() {
+                boxes.forEach(b => {
+                    if (b.element) b.element.classList.remove('highlight-target');
+                });
+            }
+
+            function findTargetBox(cx, cy) {
+                let bestIndex = null;
+                let bestDist = Infinity;
+                boxes.forEach((b, idx) => {
+                    if (b.letter) return;
+                    if (!b.element) return;
+                    const rect = b.element.getBoundingClientRect();
+                    const bx = rect.left + rect.width / 2;
+                    const by = rect.top + rect.height / 2;
+                    const dist = Math.hypot(cx - bx, cy - by);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestIndex = idx;
+                    }
+                });
+                // Threshold: must be within 80px
+                if (bestDist < 80) return bestIndex;
+                return null;
+            }
+
+            function onLetterClick(letterId, event) {
+                if (gameLocked) return;
+                const lp = letterPool.find(l => l.id === letterId);
+                if (!lp || lp.used) return;
+                playClickSound();
+                // Toggle selection
+                if (selectedLetterId === letterId) {
+                    clearSelection();
+                    selectedLetterId = null;
+                } else {
+                    clearSelection();
+                    selectedLetterId = letterId;
+                    lp.element.classList.add('selected');
+                }
+            }
+
+            function onLetterDoubleClick(letterId) {
+                if (gameLocked) return;
+                const lp = letterPool.find(l => l.id === letterId);
+                if (!lp || lp.used) return;
+                // Find first empty box
+                const emptyBoxIndex = boxes.findIndex(b => b.letter === null);
+                if (emptyBoxIndex === -1) return;
+                clearSelection();
+                selectedLetterId = null;
+                placeLetterInBox(letterId, emptyBoxIndex);
+            }
+
+            function onBoxClick(boxIndex) {
+                if (gameLocked) return;
+                const box = boxes[boxIndex];
+                if (box.letter !== null) {
+                    // Remove letter from box
+                    removeLetterFromBox(boxIndex);
+                    playClickSound();
+                    return;
+                }
+                // Box is empty - check if a letter is selected
+                if (selectedLetterId !== null) {
+                    const lp = letterPool.find(l => l.id === selectedLetterId);
+                    if (lp && !lp.used) {
+                        placeLetterInBox(selectedLetterId, boxIndex);
+                        clearSelection();
+                        selectedLetterId = null;
+                        return;
+                    }
+                }
+                // No letter selected - do nothing or highlight
+                playClickSound();
+            }
+
+            function onDropOnBox(boxIndex, letterId) {
+                if (gameLocked) return;
+                if (!letterId) return;
+                const lp = letterPool.find(l => l.id === letterId);
+                if (!lp || lp.used) return;
+                if (boxes[boxIndex].letter !== null) return;
+                clearSelection();
+                selectedLetterId = null;
+                placeLetterInBox(letterId, boxIndex);
+                playDropSound();
+            }
+
+            function placeLetterInBox(letterId, boxIndex) {
+                const lp = letterPool.find(l => l.id === letterId);
+                if (!lp || lp.used) return;
+                const box = boxes[boxIndex];
+                if (box.letter !== null) return;
+                // Place letter
+                lp.used = true;
+                box.letter = lp.letter;
+                box.sourceId = letterId;
+                // Update UI
+                lp.element.classList.add('used');
+                lp.element.draggable = false;
+                box.element.textContent = lp.letter;
+                box.element.classList.add('filled');
+                // Remove index label
+                const indexLabel = box.element.querySelector('.box-index');
+                if (indexLabel) indexLabel.style.display = 'none';
+                box.element.style.borderColor = '';
+                box.element.style.background = '';
+                updateAllStyles();
+                // Check if all boxes filled
+                checkCompletion();
+            }
+
+            function removeLetterFromBox(boxIndex) {
+                const box = boxes[boxIndex];
+                if (box.letter === null) return;
+                const sourceId = box.sourceId;
+                const lp = letterPool.find(l => l.id === sourceId);
+                // Clear box
+                box.letter = null;
+                box.sourceId = null;
+                box.element.textContent = '';
+                box.element.classList.remove('filled');
+                const indexLabel = box.element.querySelector('.box-index');
+                if (indexLabel) indexLabel.style.display = '';
+                // Restore letter card
+                if (lp) {
+                    lp.used = false;
+                    lp.element.classList.remove('used');
+                    lp.element.draggable = true;
+                }
+                updateAllStyles();
+                // Clear feedback
+                feedbackArea.textContent = '';
+                feedbackArea.className = 'feedback-area';
+                boxesRow.classList.remove('all-filled', 'correct-flash', 'error-flash');
+                retryButtonsRow.style.display = 'none';
+                buttonsRow.style.display = 'flex';
+                isChecking = false;
+            }
+
+            function clearSelection() {
+                if (selectedLetterId !== null) {
+                    const prevLp = letterPool.find(l => l.id === selectedLetterId);
+                    if (prevLp && prevLp.element) {
+                        prevLp.element.classList.remove('selected');
+                    }
+                }
+                selectedLetterId = null;
+            }
+
+            function updateAllStyles() {
+                const allFilled = boxes.every(b => b.letter !== null);
+                if (allFilled) {
+                    boxesRow.classList.add('all-filled');
+                } else {
+                    boxesRow.classList.remove('all-filled', 'correct-flash', 'error-flash');
+                }
+            }
+
+            function checkCompletion() {
+                const allFilled = boxes.every(b => b.letter !== null);
+                if (!allFilled) return;
+                if (isChecking || gameLocked) return;
+                isChecking = true;
+                const userWord = boxes.map(b => b.letter).join('');
+                if (userWord === targetWord) {
+                    // CORRECT!
+                    gameLocked = true;
+                    feedbackArea.innerHTML = '<span class="emoji">🎉</span> 太棒了！完全正确！<span class="emoji">✨</span>';
+                    feedbackArea.className = 'feedback-area success';
+                    boxesRow.classList.add('correct-flash');
+                    playCorrectSound();
+                    triggerFireworks();
+                    totalCompleted++;
+                    showToast('✅ 正确！太厉害了！', 'success-toast');
+                    // Auto advance after delay
+                    setTimeout(() => {
+                        advanceToNextWord();
+                    }, 2200);
+                } else {
+                    // ERROR
+                    feedbackArea.innerHTML =
+                        '<span class="emoji">😞</span> 不对哦，请再试一次！<span class="emoji">💪</span>';
+                    feedbackArea.className = 'feedback-area error';
+                    boxesRow.classList.add('error-flash');
+                    playErrorSound();
+                    showToast('❌ 拼写错误，请重试！', 'error-toast');
+                    retryButtonsRow.style.display = 'flex';
+                    buttonsRow.style.display = 'none';
+                    // Don't lock - user can fix
+                    setTimeout(() => {
+                        boxesRow.classList.remove('error-flash');
+                        isChecking = false;
+                    }, 600);
+                }
+            }
+
+            function resetCurrentWord() {
+                // Clear all boxes
+                boxes.forEach((box, idx) => {
+                    if (box.letter !== null) {
+                        const sourceId = box.sourceId;
+                        const lp = letterPool.find(l => l.id === sourceId);
+                        box.letter = null;
+                        box.sourceId = null;
+                        if (box.element) {
+                            box.element.textContent = '';
+                            box.element.classList.remove('filled');
+                            const indexLabel = box.element.querySelector('.box-index');
+                            if (indexLabel) indexLabel.style.display = '';
+                        }
+                        if (lp) {
+                            lp.used = false;
+                            if (lp.element) {
+                                lp.element.classList.remove('used');
+                                lp.element.draggable = true;
+                            }
+                        }
+                    }
+                });
+                // Re-shuffle letter pool
+                const letters = letterPool.map(l => l.letter);
+                const reshuffled = shuffleArray(letters);
+                letterPool.forEach((lp, i) => {
+                    lp.letter = reshuffled[i];
+                    lp.used = false;
+                    if (lp.element) {
+                        lp.element.textContent = reshuffled[i];
+                        lp.element.classList.remove('used', 'selected');
+                        lp.element.draggable = true;
+                        lp.element.style.position = '';
+                        lp.element.style.zIndex = '';
+                        lp.element.style.left = '';
+                        lp.element.style.top = '';
+                        lp.element.style.pointerEvents = '';
+                    }
+                });
+                clearSelection();
+                selectedLetterId = null;
+                feedbackArea.textContent = '';
+                feedbackArea.className = 'feedback-area';
+                boxesRow.classList.remove('all-filled', 'correct-flash', 'error-flash');
+                retryButtonsRow.style.display = 'none';
+                buttonsRow.style.display = 'flex';
+                isChecking = false;
+                gameLocked = false;
+                updateAllStyles();
+            }
+
+            function skipToNextWord() {
+                if (gameLocked) return;
+                clearSelection();
+                selectedLetterId = null;
+                feedbackArea.textContent = '';
+                feedbackArea.className = 'feedback-area';
+                boxesRow.classList.remove('all-filled', 'correct-flash', 'error-flash');
+                retryButtonsRow.style.display = 'none';
+                buttonsRow.style.display = 'flex';
+                isChecking = false;
+                gameLocked = false;
+                advanceToNextWord();
+            }
+
+            function advanceToNextWord() {
+                const result = advanceWord();
+                if (result.isComplete) {
+                    showToast('🏆 全部完成！开始新一轮~', 'success-toast');
+                }
+                renderGame();
+            }
+
+            // ==================== BUTTON HANDLERS ====================
+            btnReset.addEventListener('click', () => {
+                if (gameLocked) return;
+                resetCurrentWord();
+                playClickSound();
+                showToast('🔄 已重新排列字母', '');
+            });
+            btnSkip.addEventListener('click', () => {
+                if (gameLocked) return;
+                skipToNextWord();
+                playClickSound();
+            });
+            btnSkip2.addEventListener('click', () => {
+                if (gameLocked) return;
+                skipToNextWord();
+                playClickSound();
+            });
+            btnRetry.addEventListener('click', () => {
+                if (gameLocked) return;
+                resetCurrentWord();
+                playClickSound();
+                showToast('🔁 重新输入当前单词', '');
+            });
+
+            // ==================== KEYBOARD SHORTCUTS ====================
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight' && !gameLocked) {
+                    e.preventDefault();
+                    skipToNextWord();
+                }
+                if (e.key === 'r' && e.ctrlKey && !gameLocked) {
+                    e.preventDefault();
+                    resetCurrentWord();
+                }
+                if (e.key === 'Escape') {
+                    clearSelection();
+                    selectedLetterId = null;
+                    letterPool.forEach(lp => {
+                        if (lp.element) lp.element.classList.remove('selected');
+                    });
+                }
+            });
+
+            // ==================== QR CODE GENERATION ====================
+            function generateQRCode() {
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = '';
+                const url = window.location.href;
+                // Check if it's a local file
+                if (url.startsWith('file://')) {
+                    qrContainer.innerHTML =
+                        '<div style="padding:20px;color:#a0aec0;font-size:0.8rem;text-align:center;">📁<br>本地文件无法生成<br>可扫描二维码<br>请部署到服务器</div>';
+                    qrNote.textContent = '请将此HTML文件部署到GitHub Pages或其他服务器，二维码将自动生成。';
+                    return;
+                }
+                if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')) {
+                    qrContainer.innerHTML =
+                        '<div style="padding:20px;color:#a0aec0;font-size:0.8rem;text-align:center;">🏠<br>本地开发环境<br>请部署后扫描</div>';
+                    qrNote.textContent = '当前为本地环境，部署到公网服务器后二维码即可使用。';
+                    return;
+                }
+                try {
+                    if (typeof QRCode !== 'undefined') {
+                        new QRCode(qrContainer, {
+                            text: url,
+                            width: 130,
+                            height: 130,
+                            colorDark: '#1a202c',
+                            colorLight: '#ffffff',
+                            correctLevel: QRCode.CorrectLevel.M,
+                        });
+                        qrNote.textContent = '扫描二维码即可在手机上打开此游戏';
+                    } else {
+                        // Fallback: use API
+                        const img = document.createElement('img');
+                        img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' +
+                            encodeURIComponent(url);
+                        img.alt = 'QR Code';
+                        img.style.display = 'block';
+                        img.style.borderRadius = '4px';
+                        img.onerror = () => {
+                            qrContainer.innerHTML =
+                                '<div style="padding:15px;color:#a0aec0;font-size:0.75rem;">QR生成失败</div>';
+                        };
+                        qrContainer.appendChild(img);
+                        qrNote.textContent = '扫描二维码即可在手机上打开此游戏';
+                    }
+                } catch (e) {
+                    qrContainer.innerHTML =
+                        '<div style="padding:15px;color:#a0aec0;font-size:0.75rem;">QR生成失败</div>';
+                    qrNote.textContent = '二维码生成出错，请检查网络连接。';
+                }
+            }
+
+            // ==================== INIT ====================
+            function init() {
+                initWordSequence();
+                totalCompleted = 0;
+                renderGame();
+                // Generate QR code after a short delay to ensure DOM is ready
+                setTimeout(generateQRCode, 600);
+                // Also try when QRCode library loads
+                window.addEventListener('load', () => {
+                    setTimeout(generateQRCode, 300);
+                });
+            }
+
+            // ==================== START ====================
+            init();
+
+            // ==================== GLOBAL CLICK TO CLEAR SELECTION ====================
+            document.addEventListener('click', (e) => {
+                if (gameLocked) return;
+                const clickedOnLetter = e.target.closest('.letter-card');
+                const clickedOnBox = e.target.closest('.box');
+                const clickedOnButton = e.target.closest('button');
+                if (!clickedOnLetter && !clickedOnBox && !clickedOnButton) {
+                    clearSelection();
+                    selectedLetterId = null;
+                }
+            });
+
+            // ==================== HANDLE WINDOW RESIZE FOR CANVAS ====================
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+            });
+
+            console.log('📝 单词默写游戏已就绪！');
+            console.log('   - 拖拽字母到方框');
+            console.log('   - 双击字母自动放入');
+            console.log('   - 点击字母选中后点击方框放入');
+            console.log('   - 点击方框中的字母可移除');
+            console.log('   - 按 → 方向键跳过单词');
+            console.log('   - 按 Esc 取消选中');
+            console.log('   🎆 答对放烟花！');
+            console.log('   共 ' + wordList.length + ' 个单词等你挑战！');
+        })();
+    </script>
+</body>
+</html>
